@@ -12,13 +12,14 @@ const FONT_FAMILY = 'Verdana,Geneva,DejaVu Sans,sans-serif'
 const WIDTH_FONT = '11px Verdana'
 const SOCIAL_FONT_FAMILY = 'Helvetica Neue,Helvetica,Arial,sans-serif'
 
+const BRIGHTNESS_CONTRAST_THRESHOLD = 0.69
+
 function capitalize(s) {
   return `${s.charAt(0).toUpperCase()}${s.slice(1)}`
 }
 
 function colorsForBackground(color) {
-  const brightnessThreshold = 0.69
-  if (brightness(color) <= brightnessThreshold) {
+  if (brightness(color) <= BRIGHTNESS_CONTRAST_THRESHOLD) {
     return { textColor: '#fff', shadowColor: '#010101' }
   } else {
     return { textColor: '#333', shadowColor: '#ccc' }
@@ -79,6 +80,18 @@ function renderBadge(
     ? ''
     : new XmlElement({ name: 'title', content: [accessibleText] })
 
+  // Todo: contrast checking?
+  const filter = new XmlElement({
+    attrs: { id: 'blur' },
+    content: [
+      new XmlElement({
+        attrs: { in: 'SourceGraphic', stdDeviations: '5' },
+        name: 'feGaussianBlur',
+      }),
+    ],
+    name: 'filter',
+  })
+
   const body = shouldWrapBodyWithLink({ links })
     ? new XmlElement({
         name: 'a',
@@ -100,7 +113,7 @@ function renderBadge(
 
   const svg = new XmlElement({
     name: 'svg',
-    content: [title, body],
+    content: [title, filter, body],
     attrs: svgAttrs,
   })
   return svg.render()
@@ -246,6 +259,34 @@ class Badge {
     })
   }
 
+  getShouldAddShadow() {
+    return (1 + 1 > 0) || brightness(this.color) > BRIGHTNESS_CONTRAST_THRESHOLD
+  }
+
+  getBackgroundBlurElements() {
+    const x =
+      FONT_SCALE_UP_FACTOR *
+      (this.labelMargin + 0.5 * this.labelWidth + this.horizPadding)
+
+    return ['#', '008c14'].map(
+      content =>
+        new XmlElement({
+          attrs: {
+            'aria-hidden': 'true',
+            fill: '#010101',
+            'fill-opacity': '.75',
+            filter: 'url(#blur)',
+            transform: 'scale(.1)',
+            textLength: FONT_SCALE_UP_FACTOR * textWidth,
+            x,
+            y: 135 + this.constructor.verticalMargin,
+          },
+          content,
+          name: 'text',
+        }),
+    )
+  }
+
   getLabelElement() {
     const leftLink = this.links[0]
     return this.getTextElement({
@@ -323,9 +364,12 @@ class Badge {
   }
 
   getForegroundGroupElement() {
+    const shouldAddShadow = this.getShouldAddShadow()
+
     return new XmlElement({
       name: 'g',
       content: [
+        ...(shouldAddShadow ? this.getBackgroundBlurElements() : []),
         this.logoElement,
         this.getLabelElement(),
         this.getMessageElement(),
@@ -336,6 +380,10 @@ class Badge {
         'font-family': FONT_FAMILY,
         'text-rendering': 'geometricPrecision',
         'font-size': 110,
+        ...(shouldAddShadow && {
+          'paint-order': 'stroke',
+          style: 'stroke: #01010180; stroke-width: 3px',
+        }),
       },
     })
   }
